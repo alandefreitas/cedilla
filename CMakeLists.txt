@@ -3,7 +3,13 @@ project(cedilla)
 cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules)
-include(CodeCoverage)
+
+option(CEDILLA_CODE_COVERAGE "Enable code coverage" OFF)
+
+if (CEDILLA_CODE_COVERAGE)
+    include(CodeCoverage)
+    include(CodeCoverage)
+endif()
 
 find_package(Boost)
 
