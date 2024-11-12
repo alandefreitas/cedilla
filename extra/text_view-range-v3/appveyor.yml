@@ -1,0 +1,60 @@
+# Copyright (c) 2017, Tom Honermann
+#
+# This file is distributed under the MIT License. See the accompanying file
+# LICENSE.txt or http://www.opensource.org/licenses/mit-license.php for terms
+# and conditions.
+
+shallow_clone: true
+
+branches:
+  except:
+    - coverity_scan
+
+image: Visual Studio 2015
+
+cache:
+  - C:\cache -> appveyor.yml
+
+environment:
+  RANGE_V3_INSTALL_PATH: C:\range-v3
+  matrix:
+    - BUILD_LAST_KNOWN_GOOD_RANGE_V3: e07976393f8811d06c14cebed111005462a4b98c
+    - BUILD_RANGE_V3_HEAD: 1
+
+platform:
+  - x86
+  - x64
+
+configuration:
+  - Debug
+  - Release
+
+install:
+  - ps: |
+      mkdir -Force C:\cache
+  - ps: |
+      if (![IO.File]::Exists("C:\cache\cmake-3.6.1-win32-x86\bin\cmake.exe")) {
+        pushd C:\cache
+        Start-FileDownload 'https://cmake.org/files/v3.6/cmake-3.6.1-win32-x86.zip'
+        7z x -y cmake-3.6.1-win32-x86.zip
+        popd
+      }
+  - git clone https://github.com/ericniebler/range-v3.git C:\range-v3
+  - ps: |
+      if (Test-Path env:BUILD_LAST_KNOWN_GOOD_RANGE_V3) {
+        pushd C:\range-v3
+        git checkout $env:BUILD_LAST_KNOWN_GOOD_RANGE_V3
+        popd
+      }
+  - mkdir build && cd build
+  - C:\cache\cmake-3.6.1-win32-x86\bin\cmake .. -T v140_clang_c2
+
+build:
+  project: C:\projects\text-view-range-v3\build\ALL_BUILD.vcxproj
+  parallel: true
+  verbosity: minimal
+
+test_script:
+  - C:\cache\cmake-3.6.1-win32-x86\bin\ctest -C %CONFIGURATION%
+
+deploy: off

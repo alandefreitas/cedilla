@@ -1,0 +1,117 @@
+# Copyright (c) 2017, Tom Honermann
+#
+# This file is distributed under the MIT License. See the accompanying file
+# LICENSE.txt or http://www.opensource.org/licenses/mit-license.php for terms
+# and conditions.
+
+sudo: false
+language: cpp
+
+matrix:
+  include:
+    # Last known good range-v3 commit:
+    - os: linux
+      addons: &gcc6
+        apt:
+          packages:
+            - g++-6
+            - lcov
+          sources:
+            - ubuntu-toolchain-r-test
+      compiler: gcc
+      env: COMPILER=g++-6
+           BUILD_TYPE=RELEASE
+           LAST_KNOWN_GOOD_RANGE_V3=e07976393f8811d06c14cebed111005462a4b98c
+
+    # Linux, gcc 6:
+    - os: linux
+      addons: *gcc6
+      compiler: gcc
+      env: COMPILER=g++-6 BUILD_TYPE=RELEASE
+    - os: linux
+      addons: *gcc6
+      compiler: gcc
+      env: COMPILER=g++-6 BUILD_TYPE=DEBUG
+    - os: linux
+      addons: *gcc6
+      compiler: gcc
+      env: COMPILER=g++-6 BUILD_TYPE=DEBUG GCOV=true
+
+    # Linux, clang 3.6:
+    - os: linux
+      addons: &clang36
+        apt:
+          packages:
+            - clang-3.6
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.6
+      compiler: clang
+      env: COMPILER=clang++-3.6 BUILD_TYPE=RELEASE
+    - os: linux
+      addons: *clang36
+      compiler: clang
+      env: COMPILER=clang++-3.6 BUILD_TYPE=DEBUG
+
+    # Mac OS X, clang (default version):
+    - os: osx
+      compiler: clang
+      env: COMPILER=clang++ BUILD_TYPE=RELEASE
+    - os: osx
+      compiler: clang
+      env: COMPILER=clang++ BUILD_TYPE=DEBUG
+
+cache:
+  directories:
+    - cache
+
+install:
+  - |
+    if [ "${TRAVIS_OS_NAME}" == "linux" ]; then
+      if [ "!" -x cache/cmake/bin/cmake ]; then
+        CMAKE_URL="http://www.cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.tar.gz"
+        mkdir -p cache/cmake
+        travis_retry wget --no-check-certificate --quiet -O - "${CMAKE_URL}" | tar --strip-components=1 -xz -C cache/cmake
+      fi
+      export PATH="$TRAVIS_BUILD_DIR/cache/cmake/bin:$PATH"
+    elif [ "${TRAVIS_OS_NAME}" == "osx" ]; then
+      if "!" brew ls --version cmake; then
+        brew install cmake
+      fi
+    fi
+  - travis_retry git clone https://github.com/ericniebler/range-v3.git range-v3
+  - |
+    if [ -n "$LAST_KNOWN_GOOD_RANGE_V3" ]; then
+      git -C range-v3 checkout $LAST_KNOWN_GOOD_RANGE_V3
+    fi
+  - export RANGE_V3_INSTALL_PATH="$TRAVIS_BUILD_DIR/range-v3"
+
+before_script:
+  - uname -a
+  - which cmake
+  - cmake --version
+  - export CXX="$COMPILER"
+  - echo "CXX=$CXX"
+  - which $CXX
+  - $CXX --version
+  - "echo \"range-v3 commit: $(git -C range-v3 rev-parse HEAD)\""
+
+script:
+  - mkdir build
+  - |
+    if [ -n "$GCOV" ]; then
+      CXXFLAGS="-O0 --coverage -fprofile-arcs -ftest-coverage"; export CXXFLAGS
+      LDFLAGS="--coverage"; export LDFLAGS
+    fi
+  - (cd build && cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" ..)
+  - (cd build && cmake --build . --config "$BUILD_TYPE" --target check-install)
+
+after_success:
+  - |
+    if [ -n "$GCOV" ]; then
+      lcov --directory . --capture --output-file coverage.info
+      lcov --extract coverage.info "$PWD/*" --output-file coverage.info
+      lcov --remove coverage.info "$PWD/build/*" --output-file coverage.info
+      lcov --list coverage.info
+      bash <(curl -s https://codecov.io/bash)
+    fi
